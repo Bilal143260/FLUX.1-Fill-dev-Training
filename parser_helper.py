@@ -478,6 +478,21 @@ def parse_args(input_args=None):
         "--train_lora", action='store_true', help="Train LoRA"
     )
     
+    # FID Score Calculation Arguments
+    parser.add_argument(
+        "--calculate_fid", action='store_true', help="Calculate FID score during validation"
+    )
+    parser.add_argument(
+        "--fid_batch_size", type=int, default=32, help="Batch size for FID calculation"
+    )
+    parser.add_argument(
+        "--fid_max_images", type=int, default=100, help="Maximum number of images to process per chunk for FID calculation"
+    )
+    parser.add_argument(
+        "--fid_precision", type=str, default="fp16", choices=["fp16", "bf16", "fp32"], 
+        help="Precision mode for FID calculation"
+    )
+    
     if input_args is not None:
         args = parser.parse_args(input_args)
     else:
