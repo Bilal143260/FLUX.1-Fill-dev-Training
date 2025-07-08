@@ -30,6 +30,7 @@ from diffusers.utils import (
 )
 from diffusers.utils.torch_utils import is_compiled_module
 from data_module import BgAiDataset, collate_fn
+from metrics import calculate_fid_score
 if is_wandb_available():
     import wandb
 
@@ -112,6 +113,29 @@ def log_validation(
                 control_masks.extend(batch_control_mask)
                 target_images.extend(batch_target_image)
 
+    # Calculate FID score if enabled
+    fid_score = None
+    if args.calculate_fid and len(images) > 0:
+        logger.info("Calculating FID score...")
+        try:
+            # Use the appropriate precision mode for FID calculation
+            fid_precision = getattr(args, 'fid_precision', args.mixed_precision if args.mixed_precision else 'fp16')
+            
+            fid_score = calculate_fid_score(
+                generated_images=images,
+                target_images=target_images,
+                device=accelerator.device,
+                precision=fid_precision,
+                batch_size=getattr(args, 'fid_batch_size', 32),
+                use_memory_management=True
+            )
+            
+            logger.info(f"FID Score: {fid_score:.4f}")
+            
+        except Exception as e:
+            logger.error(f"Error calculating FID score: {str(e)}")
+            fid_score = None
+
     # Log to trackers
     tracker_key = "test" if is_final_validation else "validation"
     for tracker in accelerator.trackers:
@@ -124,7 +148,13 @@ def log_validation(
                 formatted_images.append(wandb.Image(tgt_img, caption="Target Image"))
                 formatted_images.append(wandb.Image(gen_img, caption=prompt))
             
-            tracker.log({tracker_key: formatted_images})
+            log_dict = {tracker_key: formatted_images}
+            
+            # Add FID score to log if available
+            if fid_score is not None:
+                log_dict[f"{tracker_key}/fid_score"] = fid_score
+            
+            tracker.log(log_dict)
     
     del pipeline
     if torch.cuda.is_available():
